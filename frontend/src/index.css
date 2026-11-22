@@ -1,0 +1,74 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: #eef3fb;
+    --foreground: #0f172a;
+    --card: #ffffff;
+    --card-foreground: #0f172a;
+    --popover: #ffffff;
+    --popover-foreground: #0f172a;
+    --primary: #3b66f5;
+    --primary-foreground: #ffffff;
+    --secondary: #e0e8ff;
+    --secondary-foreground: #254edB;
+    --muted: #e4ebf7;
+    --muted-foreground: #475569;
+    --accent: #dbeafe;
+    --accent-foreground: #1e40af;
+    --destructive: #ef4444;
+    --destructive-foreground: #ffffff;
+    --border: #d8e1f0;
+    --input: #cbd5e1;
+    --ring: #3b66f5;
+    --radius: 0.85rem;
+  }
+
+  body {
+    font-family: 'Inter', system-ui, -apple-system, sans-serif;
+    background: radial-gradient(circle at 12% 10%, #e1ebff 0%, #eef3fb 45%, #f5f8ff 100%);
+    color: var(--foreground);
+    overflow-x: hidden;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  h1, h2, h3, h4, .font-heading {
+    font-family: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+  }
+}
+
+@keyframes floatSlow {
+  0%, 100% {
+    transform: translateY(0px);
+  }
+  50% {
+    transform: translateY(-10px);
+  }
+}
+
+@keyframes floatDelayed {
+  0%, 100% {
+    transform: translateY(0px) translateX(0px);
+  }
+  50% {
+    transform: translateY(-8px) translateX(4px);
+  }
+}
+
+.animate-float-slow {
+  animation: floatSlow 5s ease-in-out infinite;
+}
+
+.animate-float-delayed {
+  animation: floatDelayed 6.5s ease-in-out 1.5s infinite;
+}
+
+/* Respect des préférences d'accessibilité (mouvement réduit) */
+@media (prefers-reduced-motion: reduce) {
+  .animate-float-slow,
+  .animate-float-delayed {
+    animation: none !important;
+  }
+}

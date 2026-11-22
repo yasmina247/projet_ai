@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+  <defs>
+    <linearGradient id="bg-gradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#00E5FF" />
+      <stop offset="50%" stop-color="#00B0FF" />
+      <stop offset="100%" stop-color="#1E88E5" />
+    </linearGradient>
+  </defs>
+  
+  <!-- Carré arrondi (squircle) sans arrière-plan externe -->
+  <rect x="4" y="4" width="92" height="92" rx="24" ry="24" fill="url(#bg-gradient)" />
+  
+  <!-- Lettre S centrée et en gras -->
+  <text x="50" y="52" font-family="system-ui, -apple-system, &#39;Segoe UI&#39;, Roboto, Helvetica, Arial, sans-serif" font-size="56" font-weight="700" fill="#FFFFFF" text-anchor="middle" dominant-baseline="central">S</text>
+</svg>
