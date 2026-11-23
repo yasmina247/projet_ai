@@ -20,6 +20,9 @@ class Settings(BaseSettings):
     MAIL_FROM: str = ""
     FRONTEND_URL: str = "http://localhost:5173"
 
+    VERIFY_TOKEN_EXPIRE_HOURS: int = 24
+    RESET_TOKEN_EXPIRE_MINUTES: int = 30
+
     @property
     def cors_origins_list(self) -> list[str]:
         return [o.strip() for o in self.CORS_ORIGINS.split(",") if o.strip()]

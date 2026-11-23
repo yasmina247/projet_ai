@@ -3,6 +3,7 @@ import { ResponsiveContainer } from 'recharts'
 import { Button } from '../ui/button'
 import { Input } from '../ui/input'
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card'
+import { useAuth } from '@/lib/auth'
 
 export function Logo() {
   return (
@@ -56,10 +57,12 @@ export function Field({ label, children }) {
 }
 
 export function PageHeader({ title, copy, action }) {
+  const { user } = useAuth()
+  const shopName = user?.shop_name || 'Ma boutique'
   return (
     <div className="mb-7 flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
       <div>
-        <p className="mb-1 text-xs font-bold uppercase tracking-[.16em] text-primary">Atelier Noura</p>
+        <p className="text-xs font-bold uppercase tracking-wider text-primary">{shopName}</p>
         <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">{title}</h1>
         <p className="mt-2 text-sm text-muted-foreground">{copy}</p>
       </div>
