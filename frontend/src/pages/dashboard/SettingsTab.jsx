@@ -5,6 +5,7 @@ import { Button } from '../../components/ui/button'
 import { Input } from '../../components/ui/input'
 import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/card'
 import { Field, PageHeader } from '../../components/shared/CommonUI'
+import { useAuth } from '@/lib/auth'
 
 const SECTIONS = [
   { id: 'merchant', label: 'Profil marchand', icon: User },
@@ -15,6 +16,7 @@ const SECTIONS = [
 ]
 
 export function SettingsTab({ initialSection = 'merchant' }) {
+  const { user } = useAuth()
   const [activeSection, setActiveSection] = useState(initialSection)
 
   useEffect(() => {
@@ -61,16 +63,16 @@ export function SettingsTab({ initialSection = 'merchant' }) {
             </CardHeader>
             <CardContent className="grid gap-4 sm:grid-cols-2">
               <Field label="Nom complet">
-                <Input defaultValue="Nadia El Idrissi" />
+              <Input defaultValue={user?.full_name || ''} />
               </Field>
               <Field label="Rôle dans l’entreprise">
-                <Input defaultValue="Fondatrice & Gérante" />
+                <Input defaultValue={user?.role || 'Fondatrice & Gérante'} />
               </Field>
               <Field label="Email professionnel">
-                <Input defaultValue="nadia@ateliernoura.ma" />
+                <Input defaultValue={user?.email || ''} />
               </Field>
               <Field label="Téléphone personnel">
-                <Input defaultValue="+212 6 61 24 88 90" />
+                <Input defaultValue={user?.phone || ''} />
               </Field>
               <Field label="Langue de l’interface">
                 <select className="h-9 w-full rounded-md border border-input bg-card px-3 text-sm">
@@ -94,7 +96,7 @@ export function SettingsTab({ initialSection = 'merchant' }) {
             </CardHeader>
             <CardContent className="grid gap-4 sm:grid-cols-2">
               <Field label="Nom commercial de la boutique">
-                <Input defaultValue="Atelier Noura" />
+                <Input defaultValue={user?.shop_name || ''} />
               </Field>
               <Field label="Secteur d’activité">
                 <select className="h-9 w-full rounded-md border border-input bg-card px-3 text-sm">

@@ -1,27 +1,85 @@
-import { useState } from 'react'
 import { motion } from 'framer-motion'
 import { toast } from 'sonner'
 import { ArrowRight, ChevronLeft, Eye, EyeOff, Sparkles, TrendingUp, Users } from 'lucide-react'
 import { Button } from '../components/ui/button'
 import { Input } from '../components/ui/input'
 import { Field, Logo } from '../components/shared/CommonUI'
+import { useEffect, useRef, useState } from 'react'
+import { apiRequest } from '@/lib/api'
+import { useAuth } from '@/lib/auth'
 
 export function AuthPage({ onSuccess, onBack }) {
-  const [mode, setMode] = useState('login')
-  const [email, setEmail] = useState('demo@smartsales.ma')
-  const [pass, setPass] = useState('demo123')
+  const { login } = useAuth()
+  const [mode, setMode] = useState('login')   // login | signup | forgot | reset
+  const [fullName, setFullName] = useState('')
+  const [shopName, setShopName] = useState('')
+  const [email, setEmail] = useState('')
+  const [pass, setPass] = useState('')
+  const [confirm, setConfirm] = useState('')
   const [show, setShow] = useState(false)
+  const [loading, setLoading] = useState(false)
+  const [resetToken, setResetToken] = useState(null)
+  const [unverified, setUnverified] = useState(false)
+  const handled = useRef(false)
 
-  const submit = (e) => {
+  // Liens e-mail : /?verify=TOKEN et /?reset=TOKEN
+  useEffect(() => {
+    if (handled.current) return
+    handled.current = true
+    const p = new URLSearchParams(window.location.search)
+    const v = p.get('verify')
+    const r = p.get('reset')
+    if (!v && !r) return
+    window.history.replaceState({}, '', window.location.pathname)
+    if (r) { setResetToken(r); setMode('reset'); return }
+    apiRequest('/api/auth/verify-email', { method: 'POST', body: { token: v } })
+      .then(() => toast.success('E-mail vérifié. Vous pouvez vous connecter.'))
+      .catch((e) => toast.error(e.message))
+  }, [])
+
+  const resend = async () => {
+    try {
+      const d = await apiRequest('/api/auth/resend-verification', { method: 'POST', body: { email } })
+      toast.success(d.message)
+    } catch (e) { toast.error(e.message) }
+  }
+
+  const submit = async (e) => {
     e.preventDefault()
-    if (mode === 'forgot') {
-      toast.success('Si un compte correspond, un lien a été envoyé.')
-      setMode('login')
-      return
+    if (loading) return
+    setLoading(true)
+    try {
+      if (mode === 'forgot') {
+        if (!email) throw new Error('Veuillez saisir votre email.')
+        await apiRequest('/api/auth/forgot-password', { method: 'POST', body: { email } })
+        toast.success('Si un compte correspond, un lien a été envoyé.')
+        setMode('login')
+      } else if (mode === 'reset') {
+        if (pass !== confirm) throw new Error('Les mots de passe ne correspondent pas.')
+        await apiRequest('/api/auth/reset-password', { method: 'POST', body: { token: resetToken, password: pass } })
+        toast.success('Mot de passe réinitialisé. Connectez-vous.')
+        setPass(''); setConfirm(''); setMode('login')
+      } else if (mode === 'signup') {
+        if (!fullName || !shopName || !email || !pass) throw new Error('Veuillez remplir les champs obligatoires.')
+        if (pass !== confirm) throw new Error('Les mots de passe ne correspondent pas.')
+        const d = await apiRequest('/api/auth/signup', {
+          method: 'POST',
+          body: { full_name: fullName, shop_name: shopName, email, password: pass },
+        })
+        toast.success(d.message)
+        setPass(''); setConfirm(''); setMode('login')
+      } else {
+        if (!email || !pass) throw new Error('Veuillez remplir les champs obligatoires.')
+        await login(email, pass)
+        toast.success('Bienvenue dans votre espace marchand.')
+        onSuccess?.()
+      }
+    } catch (err) {
+      setUnverified(err.code === 'email_not_verified')
+      toast.error(err.message)
+    } finally {
+      setLoading(false)
     }
-    if (!email || !pass) return toast.error('Veuillez remplir les champs obligatoires.')
-    toast.success('Bienvenue dans votre espace marchand.')
-    onSuccess()
   }
 
   return (
@@ -122,7 +180,7 @@ export function AuthPage({ onSuccess, onBack }) {
             SmartSales AI
           </span>
           <h1 className="mt-2 text-3xl font-extrabold tracking-tight text-slate-900">
-            {mode === 'login' ? 'Bon retour.' : mode === 'signup' ? 'Créez votre espace.' : 'Réinitialisez votre accès.'}
+            {mode === 'login' ? 'Bon retour.' : mode === 'signup' ? 'Créez votre espace.' : mode === 'reset' ? 'Nouveau mot de passe.' : 'Réinitialisez votre accès.'}
           </h1>
           <p className="mt-2 text-sm text-slate-500">
 
@@ -133,22 +191,35 @@ export function AuthPage({ onSuccess, onBack }) {
           </p>
 
 
-          {mode === 'forgot' ? (
+          {mode === 'forgot' || mode === 'reset' ? (
             <form onSubmit={submit} className="mt-8 space-y-5">
-              <Field label="Adresse email">
-                <Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} className="h-11 bg-slate-50/70" />
-              </Field>
-              <Button className="h-11 w-full shadow-md shadow-primary/20">Envoyer le lien</Button>
+              {mode === 'forgot' ? (
+                <Field label="Adresse email">
+                  <Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} className="h-11 bg-slate-50/70" />
+                </Field>
+              ) : (
+                <>
+                  <Field label="Nouveau mot de passe">
+                    <Input type="password" value={pass} onChange={(e) => setPass(e.target.value)} className="h-11 bg-slate-50/70" />
+                  </Field>
+                  <Field label="Confirmer le mot de passe">
+                    <Input type="password" value={confirm} onChange={(e) => setConfirm(e.target.value)} className="h-11 bg-slate-50/70" />
+                  </Field>
+                </>
+              )}
+              <Button type="submit" disabled={loading} className="h-11 w-full shadow-md shadow-primary/20">
+                {mode === 'forgot' ? 'Envoyer le lien' : 'Réinitialiser'}
+              </Button>
             </form>
           ) : (
             <form onSubmit={submit} className="mt-8 space-y-4">
               {mode === 'signup' && (
                 <>
                   <Field label="Nom complet">
-                    <Input placeholder="Nadia El Idrissi" className="h-11 bg-slate-50/70" />
+                    <Input value={fullName} onChange={(e) => setFullName(e.target.value)} placeholder="Nadia El Idrissi" className="h-11 bg-slate-50/70" />
                   </Field>
                   <Field label="Nom de la boutique">
-                    <Input placeholder="Atelier Noura" className="h-11 bg-slate-50/70" />
+                    <Input value={shopName} onChange={(e) => setShopName(e.target.value)} placeholder="Atelier Noura" className="h-11 bg-slate-50/70" />
                   </Field>
                 </>
               )}
@@ -182,7 +253,12 @@ export function AuthPage({ onSuccess, onBack }) {
 
               {mode === 'signup' && (
                 <Field label="Confirmer le mot de passe">
-                  <Input type="password" className="h-11 bg-slate-50/70" />
+                  <Input
+                    type="password"
+                    value={confirm}
+                    onChange={(e) => setConfirm(e.target.value)}
+                    className="h-11 bg-slate-50/70"
+                  />
                 </Field>
               )}
 
@@ -198,12 +274,17 @@ export function AuthPage({ onSuccess, onBack }) {
                 </div>
               )}
 
-              <Button type="submit" className="mt-2 h-11 w-full text-sm font-bold shadow-lg shadow-primary/25">
+              <Button type="submit" disabled={loading} className="mt-2 h-11 w-full text-sm font-bold shadow-lg shadow-primary/25">
                 {mode === 'login' ? 'Se connecter' : 'Créer mon espace'} <ArrowRight className="size-4" />
               </Button>
+              {unverified && mode === 'login' && (
+                <button type="button" onClick={resend} className="w-full text-center text-xs font-bold text-primary hover:underline">
+                  Renvoyer l’e-mail de vérification
+                </button>
+              )}
             </form>
           )}
-
+          {mode !== 'reset' && (
           <p className="mt-7 text-center text-sm text-slate-500">
             {mode === 'login' ? 'Pas encore de compte ?' : 'Déjà un compte ?'}{' '}
             <button
@@ -213,10 +294,7 @@ export function AuthPage({ onSuccess, onBack }) {
               {mode === 'login' ? 'Créer un compte' : 'Se connecter'}
             </button>
           </p>
-
-          <p className="mt-5 rounded-xl bg-slate-50 p-3 text-center text-[11px] leading-4 text-slate-400">
-            Démo frontend : utilisez n’importe quel email et mot de passe. L’authentification FastAPI sera branchée ensuite.
-          </p>
+          )}
         </motion.div>
       </div>
     </div>

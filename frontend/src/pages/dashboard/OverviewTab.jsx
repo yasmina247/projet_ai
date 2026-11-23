@@ -3,13 +3,17 @@ import { ArrowRight, ClipboardList, ShoppingBag, Sparkles, Users, WalletCards } 
 import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/card'
 import { Badge, PageHeader, StatCard } from '../../components/shared/CommonUI'
 import { chartData, ordersData } from '../../data/mockData'
+import { useAuth } from '@/lib/auth'
+
 
 export function OverviewTab({ onSelectModule }) {
+  const { user } = useAuth()
+  const firstName = user?.full_name?.split(' ')[0] ?? ''
   return (
     <>
       <PageHeader
-        title="Bonjour Nadia,"
-        copy="Voici ce qui se passe dans votre boutique aujourd’hui."
+        title={`Bonjour ${firstName} 👋`}
+        copy={user?.shop_name || "Voici ce qui se passe dans votre boutique aujourd’hui."}
         action={
           <select className="h-10 rounded-lg border border-input bg-card px-3 text-xs font-semibold">
             <option>7 derniers jours</option>
