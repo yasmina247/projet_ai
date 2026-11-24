@@ -1,10 +1,16 @@
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
+
+from app.api.deps import get_current_user
 from app.db.session import get_db
 from app.schemas.insights import RecommendationResponse, SegmentResponse
 from app.services.insights_service import get_recommendations, get_segments
 
-router = APIRouter(prefix="/api/insights", tags=["Insights IA"])
+router = APIRouter(
+    prefix="/api/insights",
+    tags=["Insights IA"],
+    dependencies=[Depends(get_current_user)]
+)
 
 @router.get("/recommendations", response_model=RecommendationResponse)
 def recommendations(

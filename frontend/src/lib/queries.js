@@ -40,3 +40,13 @@ export const useInventoryProducts = ({ search = '', status = 'all', page = 1, pa
   })
 export const useSales = (days) =>
   useQuery({ queryKey: ['sales', days], queryFn: () => apiRequest(`/api/analytics/sales?days=${days}`) })
+// ... tes imports existants ...
+
+export function useSignal() {
+  return useQuery({
+    queryKey: ['signal'],
+    queryFn: () => apiRequest('/api/overview/signal'),
+    // On peut ajouter un staleTime pour éviter de recalculer à chaque clic
+    staleTime: 5 * 60 * 1000, 
+  })
+}

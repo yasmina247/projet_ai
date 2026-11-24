@@ -82,6 +82,11 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from app.core.clock import days_ago, ref_date
+from app.services.forecasting import predict_recursive
+from app.services.inventory_service import get_inventory_alerts # Vérifie le nom exact
+from app.schemas.overview import SignalResponse
+from app.core.clock import ref_date, days_ago
+import datetime
 
 
 def _pct_change(current: float, previous: float) -> float | None:
@@ -184,3 +189,70 @@ def get_overview_data(db: Session, days: int = 7):
         "top_categories": top,
         "recent_orders": recent_orders,
     }
+def get_overview_signal(db: Session) -> SignalResponse:
+    ref = ref_date()
+    
+    # 1. Revenu réel des 7 derniers jours (J-7 à J-1)
+    start_date = ref - datetime.timedelta(days=7)
+    query_actual = text("""
+        SELECT COALESCE(SUM(oi.sale_price), 0)
+        FROM orders o
+        JOIN order_items oi ON o.order_id = oi.order_id
+        WHERE o.created_at >= :start_date AND o.created_at < :ref
+          AND oi.status <> 'Cancelled'
+    """)
+    actual_7d = float(db.execute(query_actual, {"start_date": start_date, "ref": ref}).scalar() or 0.0)
+
+    # 2. Revenu prévu des 7 prochains jours (J à J+6)
+    forecast = predict_recursive(db, horizon=7)
+    predicted_7d = sum(day["predicted_revenue"] for day in forecast)
+
+    # 3. Calcul de la variation
+    change_pct = None
+    if actual_7d > 0:
+        change_pct = round(((predicted_7d - actual_7d) / actual_7d) * 100, 1)
+
+    # 4. Récupération de l'alerte de stock la plus critique via TON service
+    alerts_response = get_inventory_alerts(db, limit=1)
+    stock_detail = ""
+    
+    # get_inventory_alerts renvoie {"total_produits": X, "alertes": [...]}
+    alerts_list = alerts_response.get("alertes", [])
+    
+    if alerts_list:
+        top_alert = alerts_list[0]
+        prod_name = top_alert.get("product_name", "Inconnu")
+        probabilite = top_alert.get("probabilite_rupture", 0)
+        statut = top_alert.get("statut", "Critique")
+        jours_couv = top_alert.get("jours_de_couverture", "?")
+        
+        if statut == "Rupture":
+            stock_detail = f" ⚠️ Alerte : le produit '{prod_name}' est en rupture de stock (0 jour de couverture)."
+        else:
+            stock_detail = f" ⚠️ Alerte : le produit '{prod_name}' risque la rupture (couverture : {jours_couv} jours, probabilité : {int(probabilite*100)}%)."
+
+    # 5. Génération du texte (Headline & Detail)
+    if change_pct is None:
+        headline = "Prévision de croissance en cours d'analyse."
+        tone = "neutral"
+        detail = "Pas assez de données de ventes récentes pour calculer une variation fiable."
+    elif change_pct > 0:
+        headline = f"La demande devrait augmenter de {change_pct}% cette semaine."
+        tone = "positive"
+        detail = f"Nous prévoyons {predicted_7d:,.0f} € de revenus contre {actual_7d:,.0f} € la semaine passée."
+    else:
+        headline = f"La demande devrait baisser de {abs(change_pct)}% cette semaine."
+        tone = "negative"
+        detail = f"Nous prévoyons {predicted_7d:,.0f} € de revenus contre {actual_7d:,.0f} € la semaine passée."
+
+    currency = "€"
+
+    return SignalResponse(
+        predicted_7d=round(predicted_7d, 2),
+        actual_7d=round(actual_7d, 2),
+        change_pct=change_pct,
+        currency=currency,
+        headline=headline,
+        detail=detail + stock_detail,
+        tone=tone
+    )

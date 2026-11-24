@@ -23,7 +23,8 @@
 #     recent_orders: List[RecentOrder]
 #     reference_date: str
 from pydantic import BaseModel
-
+from pydantic import BaseModel
+from typing import Optional
 
 class KPI(BaseModel):
     key: str                      # revenue | orders | avg_basket | clients
@@ -58,3 +59,15 @@ class OverviewResponse(BaseModel):
     daily_revenue: list[DailyRevenue]
     top_categories: list[CategoryShare]
     recent_orders: list[RecentOrder]
+
+
+# ... (tes autres classes existantes) ...
+
+class SignalResponse(BaseModel):
+    predicted_7d: float
+    actual_7d: float
+    change_pct: Optional[float] # Peut être null si actual_7d == 0
+    currency: str
+    headline: str
+    detail: str
+    tone: str # 'positive', 'negative', ou 'neutral'
