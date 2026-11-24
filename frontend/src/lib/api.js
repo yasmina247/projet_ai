@@ -1,28 +1,68 @@
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8000'
+const BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000'
 
-export async function apiRequest(path, options = {}) {
-  const { token, headers, ...request } = options
-  const response = await fetch(`${API_BASE_URL}${path}`, {
-    ...request,
+let accessToken = null
+let onAuthLost = () => {}
+export const setAccessToken = (t) => { accessToken = t }
+export const setAuthLostHandler = (fn) => { onAuthLost = fn }
+
+export class ApiError extends Error {
+  constructor(message, status, code) {
+    super(message)
+    this.status = status
+    this.code = code
+  }
+}
+
+function parseError(data, status) {
+  const d = data?.detail
+  if (typeof d === 'string') return new ApiError(d, status)
+  if (Array.isArray(d)) return new ApiError((d[0]?.msg || 'Données invalides.').replace(/^Value error, /, ''), status)
+  if (d && typeof d === 'object') return new ApiError(d.message || 'Erreur.', status, d.code)
+  return new ApiError('Erreur serveur. Réessayez.', status)
+}
+
+const send = (path, { method = 'GET', body, token } = {}) =>
+  fetch(`${BASE}${path}`, {
+    method,
+    credentials: 'include',
     headers: {
       'Content-Type': 'application/json',
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      ...headers,
     },
+    body: body !== undefined ? JSON.stringify(body) : undefined,
   })
 
-  if (!response.ok) {
-    throw new Error(`La requête a échoué (${response.status}).`)
-  }
-
-  return response.json()
+let refreshing = null
+export function refreshSession() {
+  refreshing ||= send('/api/auth/refresh', { method: 'POST' })
+    .then(async (r) => {
+      if (!r.ok) throw new ApiError('Session expirée.', 401)
+      const d = await r.json()
+      accessToken = d.access_token
+      return d
+    })
+    .finally(() => { refreshing = null })
+  return refreshing
 }
-// BACKEND INTEGRATION: POST /api/auth/register — never send or store passwords in the frontend.
-// BACKEND INTEGRATION: POST /api/auth/login — return a short-lived backend-issued token.
-// BACKEND INTEGRATION: GET /api/auth/me — hydrate the merchant session on app start.
-// BACKEND INTEGRATION: POST /api/auth/logout — revoke the backend session server-side.
-// BACKEND INTEGRATION: GET/POST/PATCH/DELETE /api/products — replace product mock actions.
-// BACKEND INTEGRATION: GET/PATCH /api/orders — orders created by confirmed WhatsApp purchases.
-// BACKEND INTEGRATION: GET/POST /api/whatsapp/conversations — retrieve and send messages.
-// BACKEND INTEGRATION: GET /api/ml/sales-forecast — load model output, not client-generated claims.
-// BACKEND INTEGRATION: GET /api/recommendations — load personalized recommendations.
+
+export async function apiRequest(path, { method = 'GET', body, token } = {}) {
+  let res
+  try {
+    res = await send(path, { method, body, token: token ?? accessToken })
+  } catch {
+    throw new ApiError('Serveur injoignable.', 0)
+  }
+  if (res.status === 401 && !path.startsWith('/api/auth/')) {
+    try {
+      await refreshSession()
+      res = await send(path, { method, body, token: accessToken })
+    } catch {
+      accessToken = null
+      onAuthLost()
+      throw new ApiError('Session expirée. Veuillez vous reconnecter.', 401)
+    }
+  }
+  const data = await res.json().catch(() => null)
+  if (!res.ok) throw parseError(data, res.status)
+  return data
+}

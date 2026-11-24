@@ -25,6 +25,7 @@ import { WhatsAppTab } from './WhatsAppTab'
 import { AnalyticsTab } from './AnalyticsTab'
 import { InsightsTab } from './InsightsTab'
 import { SettingsTab } from './SettingsTab'
+import { useAuth } from '@/lib/auth'
 
 const navItems = [
   { id: 'overview', label: 'Vue d’ensemble', icon: LayoutDashboard },
@@ -57,6 +58,9 @@ function NavButton({ item, active, onClick }) {
 }
 
 export function DashboardLayout({ onLogout }) {
+  const { user, logout } = useAuth()
+  const shopName = user?.shop_name || 'Ma boutique'
+  const initials = (user?.full_name || user?.shop_name || '').trim().split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0]).join('').toUpperCase() || 'U'
   const [mod, setMod] = useState('overview')
   const [settingsSection, setSettingsSection] = useState('merchant')
   const [open, setOpen] = useState(false)
@@ -115,13 +119,13 @@ export function DashboardLayout({ onLogout }) {
         <div className="border-t border-border p-3">
           <div className="flex items-center gap-3 rounded-xl p-2">
             <span className="flex size-9 items-center justify-center rounded-full bg-secondary text-xs font-bold text-primary">
-              NE
+              {initials}
             </span>
             <div className="min-w-0 flex-1">
-              <p className="truncate text-xs font-bold">Nadia El Idrissi</p>
-              <p className="truncate text-[10px] text-muted-foreground">Atelier Noura</p>
+              <p className="truncate text-xs font-bold">{user?.full_name}</p>
+              <p className="truncate text-[10px] text-muted-foreground">{user?.shop_name}</p>
             </div>
-            <button onClick={onLogout} title="Se déconnecter">
+            <button onClick={async () => { await logout(); onLogout?.() }} title="Se déconnecter">
               <LogOut className="size-4 text-muted-foreground" />
             </button>
           </div>
@@ -137,7 +141,7 @@ export function DashboardLayout({ onLogout }) {
               <Menu className="size-5" />
             </button>
             <span className="text-sm font-semibold">
-              Atelier Noura <ChevronRight className="mx-1 inline size-3 text-muted-foreground" /> {current.label}
+              {shopName} <ChevronRight className="mx-1 inline size-3 text-muted-foreground" /> {current.label}
             </span>
           </div>
           <div className="flex items-center gap-3">
@@ -146,7 +150,7 @@ export function DashboardLayout({ onLogout }) {
               <span className="absolute right-1 top-1 size-1.5 rounded-full bg-red-500" />
             </button>
             <span className="flex size-8 items-center justify-center rounded-full bg-secondary text-xs font-bold text-primary">
-              NE
+              {initials}
             </span>
           </div>
         </header>

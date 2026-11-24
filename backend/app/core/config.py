@@ -24,6 +24,9 @@ class Settings(BaseSettings):
     # Date "d'aujourd'hui" pour toutes les données métier (= CUTOFF des modèles)
     REFERENCE_DATE: date = date(2022, 4, 1)
 
+    VERIFY_TOKEN_EXPIRE_HOURS: int = 24
+    RESET_TOKEN_EXPIRE_MINUTES: int = 30
+
     @property
     def cors_origins_list(self) -> list[str]:
         return [o.strip() for o in self.CORS_ORIGINS.split(",") if o.strip()]

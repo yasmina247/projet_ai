@@ -150,6 +150,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/ca
 import { Badge, PageHeader, StatCard } from '../../components/shared/CommonUI'
 import { useOverview } from '../../lib/queries'
 import { formatDate, formatDelta, formatMoney, shortDate } from '../../lib/format'
+import { useAuth } from '@/lib/auth'
 
 const KPI_ICONS = { revenue: WalletCards, orders: ClipboardList, avg_basket: ShoppingBag, clients: Users }
 const PIE_COLORS = ['#5b72e8', '#36b98a', '#f2bd46', '#9da8c8']
@@ -163,6 +164,8 @@ const STATUS = {
 }
 
 export function OverviewTab({ onSelectModule }) {
+  const { user } = useAuth()
+  const firstName = user?.full_name?.split(' ')[0] ?? ''
   const [days, setDays] = useState(7)
   const { data, isLoading, isError, error } = useOverview(days)
 
@@ -179,7 +182,7 @@ export function OverviewTab({ onSelectModule }) {
   return (
     <>
       <PageHeader
-        title="Bonjour Nadia,"
+        title={`Bonjour ${firstName} 👋`}
         copy={`Voici l’activité de votre boutique · données au ${formatDate(data.reference_date)}.`}
         action={
           <select

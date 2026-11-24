@@ -5,9 +5,8 @@ import { Button } from '../../components/ui/button'
 import { Input } from '../../components/ui/input'
 import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/card'
 import { Field, PageHeader } from '../../components/shared/CommonUI'
-//nouvelle ligne
 import { useSettings, useUpdateSettings } from '../../lib/queries'
-
+import { useAuth } from '@/lib/auth'
 const SECTIONS = [
   { id: 'merchant', label: 'Profil marchand', icon: User },
   { id: 'store', label: 'Informations boutique', icon: Store },
@@ -17,6 +16,7 @@ const SECTIONS = [
 ]
 
 export function SettingsTab({ initialSection = 'merchant' }) {
+  const { user } = useAuth()
   const [activeSection, setActiveSection] = useState(initialSection)
 
   useEffect(() => {
@@ -78,16 +78,16 @@ export function SettingsTab({ initialSection = 'merchant' }) {
             </CardHeader>
             <CardContent className="grid gap-4 sm:grid-cols-2">
               <Field label="Nom complet">
-                <Input defaultValue="Nadia El Idrissi" />
+              <Input defaultValue={user?.full_name || ''} />
               </Field>
               <Field label="Rôle dans l’entreprise">
-                <Input defaultValue="Fondatrice & Gérante" />
+                <Input defaultValue={user?.role || 'Fondatrice & Gérante'} />
               </Field>
               <Field label="Email professionnel">
-                <Input defaultValue="nadia@ateliernoura.ma" />
+                <Input defaultValue={user?.email || ''} />
               </Field>
               <Field label="Téléphone personnel">
-                <Input defaultValue="+212 6 61 24 88 90" />
+                <Input defaultValue={user?.phone || ''} />
               </Field>
               <Field label="Langue de l’interface">
                 <select className="h-9 w-full rounded-md border border-input bg-card px-3 text-sm">
@@ -110,16 +110,14 @@ export function SettingsTab({ initialSection = 'merchant' }) {
               <CardTitle className="text-base">Informations boutique</CardTitle>
             </CardHeader>
             <CardContent className="grid gap-4 sm:grid-cols-2">
-              {/* <Field label="Nom commercial de la boutique">
-                <Input defaultValue="Atelier Noura" />
-              </Field> */}
-               <Field label="Nom commercial de la boutique">
+              <Field label="Nom commercial de la boutique">
                 <Input
                   disabled={!form}
                   value={form?.store_name ?? ''}
                   onChange={(e) => setForm({ ...form, store_name: e.target.value })}
                 />
               </Field>
+
               <Field label="Secteur d’activité">
                 <select className="h-9 w-full rounded-md border border-input bg-card px-3 text-sm">
                   <option>Prêt-à-porter & Mode</option>
