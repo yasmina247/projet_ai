@@ -163,7 +163,7 @@ def get_overview_data(db: Session, days: int = 7):
                o.status,
                DATE(o.created_at) AS d
         FROM orders o
-        JOIN users u ON o.user_id = u.id
+        JOIN customers u ON o.user_id = u.id
         JOIN order_items oi ON o.order_id = oi.order_id
         WHERE o.created_at < :ref_date
         GROUP BY o.order_id, u.first_name, u.last_name, o.status, o.created_at

@@ -26,7 +26,7 @@ export const useSettings = () =>
 export const useUpdateSettings = () => {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: (body) => apiRequest('/api/settings', { method: 'PUT', body: JSON.stringify(body) }),
+    mutationFn: (body) => apiRequest('/api/settings', { method: 'PUT', body }),
     onSuccess: () => qc.invalidateQueries(), // devise et seuil changent plusieurs pages
   })
 }

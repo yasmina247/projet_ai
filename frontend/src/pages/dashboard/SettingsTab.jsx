@@ -7,6 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/ca
 import { Field, PageHeader } from '../../components/shared/CommonUI'
 import { useSettings, useUpdateSettings } from '../../lib/queries'
 import { useAuth } from '@/lib/auth'
+
 const SECTIONS = [
   { id: 'merchant', label: 'Profil marchand', icon: User },
   { id: 'store', label: 'Informations boutique', icon: Store },
@@ -15,34 +16,50 @@ const SECTIONS = [
   { id: 'security', label: 'Compte & sécurité', icon: Shield },
 ]
 
+const NOTIFICATIONS = [
+  { key: 'notify_stock', title: 'Alerte de stock faible ou rupture', desc: 'Recevoir une alerte dès qu’un produit passe sous le seuil d’alerte de couverture.' },
+  { key: 'notify_orders', title: 'Nouvelle commande confirmée via WhatsApp', desc: 'Notification immédiate lorsqu’un client valide un panier avec l’assistant.' },
+  { key: 'notify_weekly_report', title: 'Rapport hebdomadaire des prévisions IA', desc: 'Résumé chaque lundi matin des produits à forte demande.' },
+  { key: 'notify_sms', title: 'Alertes par SMS', desc: 'Recevoir uniquement les alertes critiques par SMS.' },
+]
+
+const SELECT = 'h-9 w-full rounded-md border border-input bg-card px-3 text-sm'
+
 export function SettingsTab({ initialSection = 'merchant' }) {
   const { user } = useAuth()
   const [activeSection, setActiveSection] = useState(initialSection)
-
-  useEffect(() => {
-    if (initialSection) {
-      setActiveSection(initialSection)
-    }
-  }, [initialSection])
-
-  const handleSave = (label) => {
-    toast.success(`${label} enregistrés avec succès.`)
-  }
-  //le début 
   const { data: settings } = useSettings()
   const updateSettings = useUpdateSettings()
   const [form, setForm] = useState(null)
 
   useEffect(() => {
+    if (initialSection) setActiveSection(initialSection)
+  }, [initialSection])
+
+  useEffect(() => {
     if (settings) setForm({ ...settings, currency: settings.currency === 'DH' ? 'MAD' : settings.currency })
   }, [settings])
+
+  const handleSave = (label) => toast.success(`${label} enregistrés avec succès.`)
 
   const saveSettings = (label) =>
     updateSettings.mutate(form, {
       onSuccess: () => toast.success(`${label} enregistrés avec succès.`),
       onError: (e) => toast.error(e.message),
     })
-    // la fin 
+
+  // Raccourcis pour relier un champ au formulaire
+  const bind = (key) => ({
+    disabled: !form,
+    value: form?.[key] ?? '',
+    onChange: (e) => setForm({ ...form, [key]: e.target.value }),
+  })
+  const bindCheck = (key) => ({
+    disabled: !form,
+    checked: form?.[key] ?? false,
+    onChange: (e) => setForm({ ...form, [key]: e.target.checked }),
+  })
+  const saving = !form || updateSettings.isPending
 
   return (
     <>
@@ -78,7 +95,7 @@ export function SettingsTab({ initialSection = 'merchant' }) {
             </CardHeader>
             <CardContent className="grid gap-4 sm:grid-cols-2">
               <Field label="Nom complet">
-              <Input defaultValue={user?.full_name || ''} />
+                <Input defaultValue={user?.full_name || ''} />
               </Field>
               <Field label="Rôle dans l’entreprise">
                 <Input defaultValue={user?.role || 'Fondatrice & Gérante'} />
@@ -90,7 +107,7 @@ export function SettingsTab({ initialSection = 'merchant' }) {
                 <Input defaultValue={user?.phone || ''} />
               </Field>
               <Field label="Langue de l’interface">
-                <select className="h-9 w-full rounded-md border border-input bg-card px-3 text-sm">
+                <select className={SELECT}>
                   <option>Français (Maroc)</option>
                   <option>Arabe</option>
                 </select>
@@ -111,15 +128,10 @@ export function SettingsTab({ initialSection = 'merchant' }) {
             </CardHeader>
             <CardContent className="grid gap-4 sm:grid-cols-2">
               <Field label="Nom commercial de la boutique">
-                <Input
-                  disabled={!form}
-                  value={form?.store_name ?? ''}
-                  onChange={(e) => setForm({ ...form, store_name: e.target.value })}
-                />
+                <Input {...bind('store_name')} />
               </Field>
-
               <Field label="Secteur d’activité">
-                <select className="h-9 w-full rounded-md border border-input bg-card px-3 text-sm">
+                <select className={SELECT} {...bind('sector')}>
                   <option>Prêt-à-porter & Mode</option>
                   <option>Accessoires & Maroquinerie</option>
                   <option>Décoration & Maison</option>
@@ -127,23 +139,13 @@ export function SettingsTab({ initialSection = 'merchant' }) {
                 </select>
               </Field>
               <Field label="Ville">
-                <Input defaultValue="Fès" />
+                <Input {...bind('city')} />
               </Field>
               <Field label="Adresse physique">
-                <Input defaultValue="Quartier Ville Nouvelle, Avenue Hassan II" />
+                <Input {...bind('address')} />
               </Field>
-              {/* <Field label="Devise principale">
-                <select className="h-9 w-full rounded-md border border-input bg-card px-3 text-sm">
-                  <option>Dirham marocain (DH)</option>
-                </select>
-              </Field> */}
               <Field label="Devise principale">
-                <select
-                  disabled={!form}
-                  value={form?.currency ?? 'EUR'}
-                  onChange={(e) => setForm({ ...form, currency: e.target.value })}
-                  className="h-9 w-full rounded-md border border-input bg-card px-3 text-sm"
-                >
+                <select className={SELECT} {...bind('currency')}>
                   <option value="MAD">Dirham marocain (DH)</option>
                   <option value="EUR">Euro (€)</option>
                   <option value="USD">Dollar US ($)</option>
@@ -159,14 +161,17 @@ export function SettingsTab({ initialSection = 'merchant' }) {
                   onChange={(e) => setForm({ ...form, stock_critical_threshold: Number(e.target.value) })}
                 />
               </Field>
-              <Field label="Frais de livraison standard (DH)">
-                <Input type="number" defaultValue="35" />
+              <Field label="Frais de livraison standard">
+                <Input
+                  type="number"
+                  min={0}
+                  disabled={!form}
+                  value={form?.shipping_fee ?? ''}
+                  onChange={(e) => setForm({ ...form, shipping_fee: Number(e.target.value) })}
+                />
               </Field>
               <div className="sm:col-span-2">
-                {/* <Button onClick={() => handleSave('Informations de la boutique')}>
-                  <Check className="size-4" /> Enregistrer la boutique
-                </Button> */}
-                <Button disabled={!form || updateSettings.isPending} onClick={() => saveSettings('Informations de la boutique')}>
+                <Button disabled={saving} onClick={() => saveSettings('Informations de la boutique')}>
                   <Check className="size-4" /> Enregistrer la boutique
                 </Button>
               </div>
@@ -182,10 +187,10 @@ export function SettingsTab({ initialSection = 'merchant' }) {
             <CardContent className="space-y-4">
               <div className="grid gap-4 sm:grid-cols-2">
                 <Field label="Numéro WhatsApp Business">
-                  <Input defaultValue="+212 6 70 00 11 22" />
+                  <Input {...bind('whatsapp_number')} />
                 </Field>
                 <Field label="Ton de réponse de l’IA">
-                  <select className="h-9 w-full rounded-md border border-input bg-card px-3 text-sm">
+                  <select className={SELECT} {...bind('whatsapp_tone')}>
                     <option>Chaleureux & accueillant (recommandé)</option>
                     <option>Professionnel & concis</option>
                     <option>Darija / Français mixte</option>
@@ -193,7 +198,7 @@ export function SettingsTab({ initialSection = 'merchant' }) {
                 </Field>
               </div>
               <Field label="Message d’accueil automatique">
-                <Input defaultValue="Bonjour ! Bienvenue chez Atelier Noura. Comment puis-je vous aider aujourd’hui ?" />
+                <Input {...bind('welcome_message')} />
               </Field>
               <Field label="Token API WhatsApp Cloud (Meta / FastAPI)">
                 <Input type="password" defaultValue="EAAJxxxxxxxxxxxxxx" />
@@ -205,9 +210,9 @@ export function SettingsTab({ initialSection = 'merchant' }) {
                     L’IA répond aux questions de prix et stock même en dehors des horaires d’ouverture.
                   </p>
                 </div>
-                <input type="checkbox" defaultChecked className="size-4 accent-primary" />
+                <input type="checkbox" {...bindCheck('enable_whatsapp')} className="size-4 accent-primary" />
               </div>
-              <Button onClick={() => handleSave('Paramètres WhatsApp IA')}>
+              <Button disabled={saving} onClick={() => saveSettings('Paramètres WhatsApp IA')}>
                 <Check className="size-4" /> Enregistrer la configuration WhatsApp
               </Button>
             </CardContent>
@@ -220,40 +225,16 @@ export function SettingsTab({ initialSection = 'merchant' }) {
               <CardTitle className="text-base">Préférences de notifications</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
-              {[
-                {
-                  title: 'Alerte de stock faible ou rupture',
-                  desc: 'Recevoir une alerte dès qu’un produit passe sous le seuil de 12 unités.',
-                  checked: true,
-                },
-                {
-                  title: 'Nouvelle commande confirmée via WhatsApp',
-                  desc: 'Notification immédiate lorsqu’un client valide un panier avec l’assistant.',
-                  checked: true,
-                },
-                {
-                  title: 'Rapport hebdomadaire des prévisions IA',
-                  desc: 'Résumé chaque lundi matin des produits à forte demande.',
-                  checked: true,
-                },
-                {
-                  title: 'Alertes par SMS',
-                  desc: 'Recevoir uniquement les alertes critiques par SMS.',
-                  checked: false,
-                },
-              ].map((item) => (
-                <div
-                  key={item.title}
-                  className="flex items-center justify-between rounded-xl border border-border p-4"
-                >
+              {NOTIFICATIONS.map((item) => (
+                <div key={item.key} className="flex items-center justify-between rounded-xl border border-border p-4">
                   <div>
                     <p className="text-sm font-semibold">{item.title}</p>
                     <p className="text-xs text-muted-foreground">{item.desc}</p>
                   </div>
-                  <input type="checkbox" defaultChecked={item.checked} className="size-4 accent-primary" />
+                  <input type="checkbox" {...bindCheck(item.key)} className="size-4 accent-primary" />
                 </div>
               ))}
-              <Button onClick={() => handleSave('Préférences de notifications')}>
+              <Button disabled={saving} onClick={() => saveSettings('Préférences de notifications')}>
                 <Check className="size-4" /> Mettre à jour
               </Button>
             </CardContent>

@@ -10,7 +10,7 @@ engine = create_engine(settings.DATABASE_URL)
 DATA_DIR = r"C:\Users\A\Downloads\The_look\data\clean"
 
 files = {
-    "users": "users.parquet",
+    "customers": "users.parquet",
     "products": "products.parquet",
     "orders": "orders_train.parquet",        # Pas de orders_test !
     "order_items": "order_items_train.parquet", # Pas de order_items_test !
