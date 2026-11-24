@@ -5,6 +5,8 @@ import { Button } from '../../components/ui/button'
 import { Input } from '../../components/ui/input'
 import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/card'
 import { Field, PageHeader } from '../../components/shared/CommonUI'
+//nouvelle ligne
+import { useSettings, useUpdateSettings } from '../../lib/queries'
 
 const SECTIONS = [
   { id: 'merchant', label: 'Profil marchand', icon: User },
@@ -26,6 +28,21 @@ export function SettingsTab({ initialSection = 'merchant' }) {
   const handleSave = (label) => {
     toast.success(`${label} enregistrés avec succès.`)
   }
+  //le début 
+  const { data: settings } = useSettings()
+  const updateSettings = useUpdateSettings()
+  const [form, setForm] = useState(null)
+
+  useEffect(() => {
+    if (settings) setForm({ ...settings, currency: settings.currency === 'DH' ? 'MAD' : settings.currency })
+  }, [settings])
+
+  const saveSettings = (label) =>
+    updateSettings.mutate(form, {
+      onSuccess: () => toast.success(`${label} enregistrés avec succès.`),
+      onError: (e) => toast.error(e.message),
+    })
+    // la fin 
 
   return (
     <>
@@ -93,8 +110,15 @@ export function SettingsTab({ initialSection = 'merchant' }) {
               <CardTitle className="text-base">Informations boutique</CardTitle>
             </CardHeader>
             <CardContent className="grid gap-4 sm:grid-cols-2">
-              <Field label="Nom commercial de la boutique">
+              {/* <Field label="Nom commercial de la boutique">
                 <Input defaultValue="Atelier Noura" />
+              </Field> */}
+               <Field label="Nom commercial de la boutique">
+                <Input
+                  disabled={!form}
+                  value={form?.store_name ?? ''}
+                  onChange={(e) => setForm({ ...form, store_name: e.target.value })}
+                />
               </Field>
               <Field label="Secteur d’activité">
                 <select className="h-9 w-full rounded-md border border-input bg-card px-3 text-sm">
@@ -110,16 +134,41 @@ export function SettingsTab({ initialSection = 'merchant' }) {
               <Field label="Adresse physique">
                 <Input defaultValue="Quartier Ville Nouvelle, Avenue Hassan II" />
               </Field>
-              <Field label="Devise principale">
+              {/* <Field label="Devise principale">
                 <select className="h-9 w-full rounded-md border border-input bg-card px-3 text-sm">
                   <option>Dirham marocain (DH)</option>
                 </select>
+              </Field> */}
+              <Field label="Devise principale">
+                <select
+                  disabled={!form}
+                  value={form?.currency ?? 'EUR'}
+                  onChange={(e) => setForm({ ...form, currency: e.target.value })}
+                  className="h-9 w-full rounded-md border border-input bg-card px-3 text-sm"
+                >
+                  <option value="MAD">Dirham marocain (DH)</option>
+                  <option value="EUR">Euro (€)</option>
+                  <option value="USD">Dollar US ($)</option>
+                </select>
+              </Field>
+              <Field label="Seuil d’alerte stock (jours de couverture)">
+                <Input
+                  type="number"
+                  min={1}
+                  max={365}
+                  disabled={!form}
+                  value={form?.stock_critical_threshold ?? ''}
+                  onChange={(e) => setForm({ ...form, stock_critical_threshold: Number(e.target.value) })}
+                />
               </Field>
               <Field label="Frais de livraison standard (DH)">
                 <Input type="number" defaultValue="35" />
               </Field>
               <div className="sm:col-span-2">
-                <Button onClick={() => handleSave('Informations de la boutique')}>
+                {/* <Button onClick={() => handleSave('Informations de la boutique')}>
+                  <Check className="size-4" /> Enregistrer la boutique
+                </Button> */}
+                <Button disabled={!form || updateSettings.isPending} onClick={() => saveSettings('Informations de la boutique')}>
                   <Check className="size-4" /> Enregistrer la boutique
                 </Button>
               </div>

@@ -1,3 +1,4 @@
+from datetime import date
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -19,6 +20,9 @@ class Settings(BaseSettings):
     BREVO_SMTP_KEY: str = ""
     MAIL_FROM: str = ""
     FRONTEND_URL: str = "http://localhost:5173"
+    
+    # Date "d'aujourd'hui" pour toutes les données métier (= CUTOFF des modèles)
+    REFERENCE_DATE: date = date(2022, 4, 1)
 
     @property
     def cors_origins_list(self) -> list[str]:
