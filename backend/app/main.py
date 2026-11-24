@@ -14,7 +14,8 @@ from app.api.routes.settings import router as settings_router
 from app.core.config import settings
 from app.db.session import get_db
 from app.services.ml_loader import load_all
-
+from app.api.routes.inventory_products import router as inventory_products_router
+from app.api.routes.analytics_sales import router as analytics_sales_router
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -45,3 +46,5 @@ app.include_router(inventory_router)
 app.include_router(insights_router)
 app.include_router(overview_router)
 app.include_router(settings_router)
+app.include_router(inventory_products_router)
+app.include_router(analytics_sales_router)

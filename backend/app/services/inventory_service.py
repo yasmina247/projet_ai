@@ -1,122 +1,112 @@
 import pandas as pd
-from sqlalchemy.orm import Session
 from sqlalchemy import text
-from app.services.ml_loader import get_model
+from sqlalchemy.orm import Session
+
 from app.core.clock import ref_date
+from app.services.ml_loader import get_model
+
+# 30 j = définition de la cible d'entraînement (stock < ventes sur 30 jours)
+DEFAULT_THRESHOLD_DAYS = 30
+
+QUERY = text("""
+    WITH stock AS (
+        SELECT product_id,
+               COUNT(*) AS received,
+               COUNT(*) FILTER (WHERE sold_at IS NOT NULL AND sold_at < :ref_date) AS sold
+        FROM inventory_items
+        WHERE created_at < :ref_date
+        GROUP BY product_id
+    ),
+    lines AS (
+        SELECT oi.id, oi.product_id, oi.sale_price, o.created_at AS order_date,
+               (oi.returned_at IS NOT NULL AND oi.returned_at < :ref_date) AS is_returned
+        FROM order_items oi
+        JOIN orders o ON o.order_id = oi.order_id
+        WHERE o.created_at < :ref_date
+          AND oi.status <> 'Cancelled'
+    ),
+    hist AS (
+        SELECT product_id,
+               COUNT(*) AS n_sales,
+               AVG(sale_price) AS avg_price,
+               AVG(CASE WHEN is_returned THEN 1.0 ELSE 0.0 END) AS return_rate
+        FROM lines
+        GROUP BY product_id
+    ),
+    recent AS (
+        SELECT product_id,
+               COUNT(*) AS units_30d,
+               SUM(sale_price) AS revenue_30d
+        FROM lines
+        WHERE order_date >= (:ref_date - INTERVAL '30 days')
+        GROUP BY product_id
+    )
+    SELECT p.id AS product_id,
+           p.name AS product_name,
+           (st.received - st.sold) AS stock_actuel,
+           r.units_30d,
+           r.revenue_30d,
+           COALESCE(h.n_sales, 0) AS n_sales,
+           h.avg_price,
+           COALESCE(h.return_rate, 0) AS return_rate,
+           p.retail_price,
+           p.cost
+    FROM products p
+    JOIN stock st ON st.product_id = p.id
+    JOIN recent r ON r.product_id = p.id
+    LEFT JOIN hist h ON h.product_id = p.id
+""")
+
+COLUMNS = ["product_id", "product_name", "stock_actuel", "units_30d", "revenue_30d",
+           "n_sales", "avg_price", "return_rate", "retail_price", "cost"]
+
+
+def _threshold_days(db: Session) -> int:
+    value = db.execute(text("SELECT stock_critical_threshold FROM shop_settings LIMIT 1")).scalar()
+    return int(value) if value else DEFAULT_THRESHOLD_DAYS
+
 
 def get_inventory_alerts(db: Session, limit: int = 50):
-    # 1. Charger le modèle XGBoost
-    model_dict = get_model("stockout")
-    model = model_dict["model"]
-    features = model_dict["features"]
-    imputer = model_dict["imputer"]
-    outlier = model_dict["outlier"]
-    scaler = model_dict["scaler"]
+    mdl = get_model("stockout")
+    features = mdl["features"]
 
-    reference = ref_date()
-
-    # 2. Récupérer les données depuis PostgreSQL
-    # ⚠️ CORRECTION : On utilise product_retail_price au lieu de retail_price
-        # 2. Récupérer les données depuis PostgreSQL
-    query = text("""
-        WITH sales_30d AS (
-            SELECT 
-                oi.product_id,
-                SUM(oi.sale_price) as revenue_30d,
-                COUNT(oi.id) as n_sales,
-                AVG(oi.sale_price) as avg_price
-            FROM order_items oi
-            JOIN orders o ON oi.order_id = o.order_id
-            WHERE o.created_at < :ref_date
-              AND o.created_at >= (:ref_date - INTERVAL '30 days')
-            GROUP BY oi.product_id
-        ),
-        stock_actuel AS (
-            SELECT 
-                product_id,
-                COUNT(id) as stock
-            FROM inventory_items
-            WHERE created_at < :ref_date 
-              AND sold_at IS NULL
-            GROUP BY product_id
-        )
-        SELECT 
-            p.id as product_id,
-            p.name as product_name,
-            COALESCE(s.revenue_30d, 0) as revenue_30d,
-            COALESCE(s.n_sales, 0) as n_sales,
-            COALESCE(s.avg_price, p.retail_price) as avg_price,
-            p.retail_price,
-            p.cost,
-            COALESCE(st.stock, 0) as stock_actuel
-        FROM products p
-        JOIN sales_30d s ON p.id = s.product_id  -- On ne garde que ceux qui ont eu des ventes
-        LEFT JOIN stock_actuel st ON p.id = st.product_id
-        ORDER BY s.n_sales DESC  -- On prend les produits les plus vendus
-        LIMIT :limit
-    """)
-    
-    result = db.execute(query, {"ref_date": reference, "limit": limit}).fetchall()
-    
-    if not result:
+    rows = db.execute(QUERY, {"ref_date": ref_date()}).fetchall()
+    if not rows:
         return {"total_produits": 0, "alertes": []}
 
-    df = pd.DataFrame(result, columns=[
-        "product_id", "product_name", "revenue_30d", "n_sales", 
-        "avg_price", "retail_price", "cost", "stock_actuel"
-    ])
+    df = pd.DataFrame(rows, columns=COLUMNS)
+    num_cols = [c for c in COLUMNS if c != "product_name"]
+    df[num_cols] = df[num_cols].astype(float)
 
-    # 3. Préparation des features pour le modèle
-    df['return_rate'] = 0.0 
-    
-    # On s'assure que toutes les features attendues par le modèle sont là
-    # (Si le modèle attend 'retail_price' et 'cost', on les a bien)
-    X = df[features].copy()
-    
-    # Application du pipeline de preprocessing
-    X_imputed = imputer.transform(X)
-    X_outlier = outlier.transform(X_imputed)
-    X_scaled = scaler.transform(X_outlier)
-    
-    # Probabilité de rupture (classe 1)
-    probas = model.predict_proba(X_scaled)[:, 1]
-    df['probabilite_rupture'] = probas
+    # Même pipeline qu'à l'entraînement
+    X = mdl["imputer"].transform(df[features].copy())
+    X = mdl["outlier"].transform(X)
+    X = mdl["scaler"].transform(X)
+    df["probabilite_rupture"] = mdl["model"].predict_proba(X)[:, 1]
 
-    # 4. Règle métier simple (jours de couverture)
-    df['ventes_par_jour'] = df['n_sales'] / 30.0
-    df['jours_de_couverture'] = df.apply(
-        lambda row: row['stock_actuel'] / row['ventes_par_jour'] if row['ventes_par_jour'] > 0 else 999.0, 
-        axis=1
-    )
-    
-    # 5. Définition du statut (Seuil critique : 7 jours)
-    def get_statut(row):
-        if row['stock_actuel'] == 0:
-            return "Rupture"
-        elif row['jours_de_couverture'] < 70: # Seuil temporairement abaissé/élevé pour la démo
-            return "Critique"
-        else:
-            return "OK"
+    # Règle explicable : jours de couverture = stock / ventes par jour
+    threshold = _threshold_days(db)
+    df["jours_de_couverture"] = df["stock_actuel"] / (df["units_30d"] / 30.0)
+    df["statut"] = "OK"
+    df.loc[df["jours_de_couverture"] < threshold, "statut"] = "Critique"
+    df.loc[df["stock_actuel"] <= 0, "statut"] = "Rupture"
 
-    df['statut'] = df.apply(get_statut, axis=1)
-    
-    # On ne garde que les alertes, on trie par probabilité décroissante
-    df_alertes = df[df['statut'].isin(["Rupture", "Critique"])].sort_values(by="probabilite_rupture", ascending=False)
-    
-    # 6. Formatage de la réponse
-    alertes_list = []
-    for _, row in df_alertes.iterrows():
-        alertes_list.append({
-            "product_id": int(row['product_id']),
-            "product_name": str(row['product_name']),
-            "stock_actuel": int(row['stock_actuel']),
-            "ventes_30j": int(row['n_sales']),
-            "jours_de_couverture": round(float(row['jours_de_couverture']), 1),
-            "probabilite_rupture": round(float(row['probabilite_rupture']), 2),
-            "statut": str(row['statut'])
-        })
+    alerts = (df[df["statut"] != "OK"]
+              .sort_values(["jours_de_couverture", "probabilite_rupture"], ascending=[True, False])
+              .head(limit))
 
     return {
         "total_produits": len(df),
-        "alertes": alertes_list
+        "alertes": [
+            {
+                "product_id": int(r.product_id),
+                "product_name": str(r.product_name),
+                "stock_actuel": int(r.stock_actuel),
+                "ventes_30j": int(r.units_30d),
+                "jours_de_couverture": round(float(r.jours_de_couverture), 1),
+                "probabilite_rupture": round(float(r.probabilite_rupture), 2),
+                "statut": r.statut,
+            }
+            for r in alerts.itertuples()
+        ],
     }

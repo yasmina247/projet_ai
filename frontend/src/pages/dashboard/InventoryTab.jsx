@@ -1,83 +1,49 @@
-// import { toast } from 'sonner'
-// import { AlertTriangle, Boxes, Clock3, Package, WalletCards } from 'lucide-react'
-// import { Button } from '../../components/ui/button'
-// import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/card'
-// import { Badge, PageHeader, StatCard } from '../../components/shared/CommonUI'
-// import { productsData } from '../../data/mockData'
-
-// export function InventoryTab() {
-//   return (
-//     <>
-//       <PageHeader
-//         title="Inventaire"
-//         copy="Surveillez vos niveaux de stock et évitez les ruptures."
-//         action={
-//           <Button onClick={() => toast.success('Mouvement de stock enregistré en démo')}>
-//             <Clock3 className="size-4" /> Mouvement de stock
-//           </Button>
-//         }
-//       />
-//       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-//         <StatCard label="Valeur du stock" value="186 420 DH" delta="+6,2%" icon={WalletCards} />
-//         <StatCard label="Produits en stock" value="86" delta="+4" icon={Boxes} />
-//         <StatCard label="Stock faible" value="7" delta="À surveiller" icon={AlertTriangle} />
-//         <StatCard label="En rupture" value="3" delta="-2 cette semaine" icon={Package} />
-//       </div>
-//       <Card className="mt-5 border-border">
-//         <CardHeader>
-//           <CardTitle className="text-base">Niveaux de stock</CardTitle>
-//         </CardHeader>
-//         <CardContent className="space-y-5">
-//           {productsData.map((p) => (
-//             <div key={p.sku} className="grid gap-2 sm:grid-cols-[1.3fr_.6fr_.6fr_1.3fr_.5fr] sm:items-center">
-//               <div className="flex items-center gap-3">
-//                 <img src={p.img} alt="" className="size-9 rounded-lg object-cover" />
-//                 <b className="text-sm">{p.n}</b>
-//               </div>
-//               <span className="text-xs text-muted-foreground">
-//                 Actuel <b className="text-foreground">{p.stock}</b>
-//               </span>
-//               <span className="text-xs text-muted-foreground">
-//                 Seuil <b className="text-foreground">12</b>
-//               </span>
-//               <div className="h-2 rounded-full bg-muted">
-//                 <div
-//                   className={`h-full rounded-full ${p.stock === 0 ? 'bg-red-500' : p.stock < 12 ? 'bg-amber-400' : 'bg-emerald-500'}`}
-//                   style={{ width: `${Math.min(100, p.stock * 1.5)}%` }}
-//                 />
-//               </div>
-//               <Badge tone={p.stock === 0 ? 'red' : p.stock < 12 ? 'amber' : 'green'}>
-//                 {p.stock === 0 ? 'Rupture' : p.stock < 12 ? 'Faible' : 'Sain'}
-//               </Badge>
-//             </div>
-//           ))}
-//         </CardContent>
-//       </Card>
-//     </>
-//   )
-// }
-import { AlertTriangle, Boxes, Clock3, Package, RefreshCw } from 'lucide-react'
+import { useEffect, useState } from 'react'
+import { Boxes, Clock3, Package, RefreshCw, Wallet } from 'lucide-react'
 import { Button } from '../../components/ui/button'
+import { Input } from '../../components/ui/input'
 import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/card'
 import { Badge, PageHeader, StatCard } from '../../components/shared/CommonUI'
-import { useInventoryAlerts } from '../../lib/queries'
+import { useInventoryProducts, useSettings } from '../../lib/queries'
+import { formatMoney } from '../../lib/format'
+
+const FILTERS = [
+  ['all', 'Tous'],
+  ['Rupture', 'Rupture'],
+  ['Critique', 'Critique'],
+  ['OK', 'OK'],
+]
+const TONE = { Rupture: 'red', Critique: 'amber', OK: 'green' }
 
 export function InventoryTab() {
-  const { data, isLoading, isError, error, refetch, isFetching } = useInventoryAlerts(50)
+  const [search, setSearch] = useState('')
+  const [debounced, setDebounced] = useState('')
+  const [status, setStatus] = useState('all')
+  const [page, setPage] = useState(1)
 
-  if (isLoading) return <p className="p-6 text-sm text-muted-foreground">Chargement…</p>
+  // On attend 350 ms après la dernière frappe avant d'interroger l'API
+  useEffect(() => {
+    const t = setTimeout(() => {
+      setDebounced(search)
+      setPage(1)
+    }, 350)
+    return () => clearTimeout(t)
+  }, [search])
+
+  const { data, isLoading, isError, error, refetch, isFetching } = useInventoryProducts({ search: debounced, status, page })
+  const { data: settings } = useSettings()
+
+  if (isLoading) return <p className="p-6 text-sm text-muted-foreground">Chargement du stock…</p>
   if (isError) return <p className="p-6 text-sm text-red-500">Impossible de charger l’inventaire : {error.message}</p>
 
-  const alerts = data.alertes
-  const ruptures = alerts.filter((a) => a.statut === 'Rupture').length
-  const critiques = alerts.filter((a) => a.statut === 'Critique').length
-  const share = data.total_produits ? Math.round((alerts.length / data.total_produits) * 100) : 0
+  const pages = Math.max(1, Math.ceil(data.total_filtered / data.page_size))
+  const fmt = (n) => n.toLocaleString('fr-FR')
 
   return (
     <>
       <PageHeader
         title="Inventaire"
-        copy="Alertes de rupture : probabilité du modèle XGBoost et jours de couverture."
+        copy="Stock réel de tous les produits, avec jours de couverture et risque de rupture prédit."
         action={
           <Button onClick={() => refetch()} disabled={isFetching}>
             <RefreshCw className="size-4" /> Actualiser
@@ -85,41 +51,67 @@ export function InventoryTab() {
         }
       />
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <StatCard label="Produits analysés" value={data.total_produits} delta="Top ventes 30 j" icon={Boxes} />
-        <StatCard label="Produits en alerte" value={alerts.length} delta={`${share}% des produits`} icon={AlertTriangle} />
-        <StatCard label="Stock critique" value={critiques} delta="À réapprovisionner" icon={Clock3} />
-        <StatCard label="En rupture" value={ruptures} delta="" icon={Package} />
+        <StatCard label="Références en stock" value={fmt(data.counts.total)} delta="" icon={Boxes} />
+        <StatCard label="Valeur du stock" value={formatMoney(data.stock_value, settings?.currency ?? 'EUR')} delta="" icon={Wallet} />
+        <StatCard label="Stock critique" value={fmt(data.counts.critique)} delta="Sous le seuil d’alerte" icon={Clock3} />
+        <StatCard label="En rupture" value={fmt(data.counts.rupture)} delta="" icon={Package} />
       </div>
+
       <Card className="mt-5 border-border">
-        <CardHeader>
-          <CardTitle className="text-base">Produits à risque de rupture</CardTitle>
-          <p className="text-xs text-muted-foreground">La barre indique la probabilité de rupture prédite.</p>
+        <CardHeader className="gap-3">
+          <CardTitle className="text-base">Produits</CardTitle>
+          <div className="flex flex-wrap items-center gap-2">
+            <Input
+              className="max-w-xs"
+              placeholder="Rechercher un produit…"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+            />
+            {FILTERS.map(([value, label]) => (
+              <Button
+                key={value}
+                size="sm"
+                variant={status === value ? 'default' : 'outline'}
+                onClick={() => {
+                  setStatus(value)
+                  setPage(1)
+                }}
+              >
+                {label}
+              </Button>
+            ))}
+          </div>
         </CardHeader>
-        <CardContent className="space-y-5">
-          {alerts.length === 0 && (
-            <p className="text-sm text-muted-foreground">Aucune alerte : le stock des produits analysés est suffisant.</p>
-          )}
-          {alerts.map((a) => (
-            <div key={a.product_id} className="grid gap-2 sm:grid-cols-[1.5fr_.6fr_.7fr_1.2fr_.6fr] sm:items-center">
-              <b className="text-sm">{a.product_name}</b>
-              <span className="text-xs text-muted-foreground">
-                Stock <b className="text-foreground">{a.stock_actuel}</b>
-              </span>
-              <span className="text-xs text-muted-foreground">
-                Couverture <b className="text-foreground">{a.jours_de_couverture} j</b>
-              </span>
-              <div className="flex items-center gap-2">
-                <div className="h-2 flex-1 rounded-full bg-muted">
-                  <div
-                    className={`h-full rounded-full ${a.statut === 'Rupture' ? 'bg-red-500' : 'bg-amber-400'}`}
-                    style={{ width: `${Math.round(a.probabilite_rupture * 100)}%` }}
-                  />
-                </div>
-                <span className="w-9 text-right text-xs font-bold">{Math.round(a.probabilite_rupture * 100)}%</span>
+        <CardContent className="space-y-3">
+          {data.items.length === 0 && <p className="text-sm text-muted-foreground">Aucun produit ne correspond.</p>}
+          {data.items.map((p) => (
+            <div key={p.product_id} className="grid gap-2 rounded-xl bg-muted/40 p-3 text-xs sm:grid-cols-[1.8fr_.5fr_.6fr_.7fr_.9fr_.6fr] sm:items-center">
+              <div>
+                <b className="text-sm">{p.product_name}</b>
+                <span className="block text-muted-foreground">{p.category ?? '—'}</span>
               </div>
-              <Badge tone={a.statut === 'Rupture' ? 'red' : 'amber'}>{a.statut}</Badge>
+              <span>
+                Stock <b>{p.stock_actuel}</b>
+              </span>
+              <span>{p.ventes_30j} ventes/30 j</span>
+              <span>{p.jours_de_couverture == null ? 'Pas de vente récente' : `${p.jours_de_couverture} j de couverture`}</span>
+              <span>{p.probabilite_rupture == null ? '—' : `Risque ${Math.round(p.probabilite_rupture * 100)}%`}</span>
+              <Badge tone={TONE[p.statut]}>{p.statut}</Badge>
             </div>
           ))}
+          <div className="flex items-center justify-between pt-2 text-xs text-muted-foreground">
+            <span>
+              {fmt(data.total_filtered)} produits · page {page} / {pages}
+            </span>
+            <div className="flex gap-2">
+              <Button size="sm" variant="outline" disabled={page <= 1} onClick={() => setPage(page - 1)}>
+                Précédent
+              </Button>
+              <Button size="sm" variant="outline" disabled={page >= pages} onClick={() => setPage(page + 1)}>
+                Suivant
+              </Button>
+            </div>
+          </div>
         </CardContent>
       </Card>
     </>

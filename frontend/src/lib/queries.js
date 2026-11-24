@@ -1,4 +1,4 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { apiRequest } from './api'
 
 export const useOverview = (days) =>
@@ -29,4 +29,14 @@ export const useUpdateSettings = () => {
     mutationFn: (body) => apiRequest('/api/settings', { method: 'PUT', body }),
     onSuccess: () => qc.invalidateQueries(), // devise et seuil changent plusieurs pages
   })
+
 }
+export const useInventoryProducts = ({ search = '', status = 'all', page = 1, pageSize = 15 }) =>
+  useQuery({
+    queryKey: ['inventory-products', search, status, page, pageSize],
+    queryFn: () =>
+      apiRequest(`/api/inventory/products?${new URLSearchParams({ search, status, page, page_size: pageSize })}`),
+    placeholderData: keepPreviousData,
+  })
+export const useSales = (days) =>
+  useQuery({ queryKey: ['sales', days], queryFn: () => apiRequest(`/api/analytics/sales?days=${days}`) })
